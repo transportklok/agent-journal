@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   image:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_TK_4 || 'tk-4' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -62,7 +62,7 @@ jobs:
             --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
   team-image:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER_TK_4 || 'tk-4' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
