@@ -31,7 +31,7 @@ const quiet = computed(() => (props.entry.time ? quietOf(props.entry.time, now.v
                 <span class="aw-name">{{ entry.heading || entry.name }}</span>
                 <span class="aw-pill">
                     <StateDot :state="state.dot" />
-                    <span class="aw-state">{{ state.word }}</span>
+                    <span class="aw-state" :title="state.word">{{ state.word }}</span>
                 </span>
             </span>
         </template>
@@ -145,7 +145,9 @@ const quiet = computed(() => (props.entry.time ? quietOf(props.entry.time, now.v
 
 .aw-pill {
     display: inline-flex;
-    flex: none;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 65%;
     align-items: center;
     gap: 6px;
     margin-left: auto;
@@ -156,20 +158,33 @@ const quiet = computed(() => (props.entry.time ? quietOf(props.entry.time, now.v
 }
 
 .aw-state {
+    min-width: 0;
+    overflow: hidden;
     color: var(--text-2);
     font-weight: 500;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.agent-window.waiting .aw-pill {
+.agent-window.closed .aw-state {
+    color: var(--text-3);
+    font-weight: 400;
+}
+
+.agent-window.waiting .aw-pill,
+.agent-window.ready .aw-pill,
+.agent-window.stopped .aw-pill {
     border-color: color-mix(in srgb, var(--tone-warn) 45%, var(--border-2));
 }
 
-.agent-window.waiting .aw-state {
+.agent-window.waiting .aw-state,
+.agent-window.ready .aw-state,
+.agent-window.stopped .aw-state {
     color: var(--tone-warn);
 }
 
-.agent-window.stuck .aw-state {
+.agent-window.stuck .aw-state,
+.agent-window.unfinished .aw-state {
     color: var(--danger);
 }
 

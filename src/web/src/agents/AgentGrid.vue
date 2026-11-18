@@ -3,7 +3,7 @@ import {computed, ref, watch} from "vue";
 import Icon from "../kit/Icon.vue";
 import Tile from "../kit/Tile.vue";
 import AgentWindow from "./AgentWindow.vue";
-import {hiddenBy, hiddenSummary, orchestraOf, ordered, slotsFor} from "../domain/orchestra.js";
+import {hiddenBy, hiddenSummary, isClosed, orchestraOf, ordered, slotsFor} from "../domain/orchestra.js";
 import {agent} from "../composables/leadAgent.js";
 import {useWorkers, useWorkersShown} from "../composables/workers.js";
 import {store} from "../state/store.js";
@@ -26,9 +26,12 @@ const entries = computed(() =>
         slots.value
     )
 );
+const active = computed(() => entries.value.filter((entry) => !isClosed(entry)));
+const closed = computed(() => entries.value.filter(isClosed));
+const closedOpen = ref(false);
 const LEAST = 9;
 const ROW = 3;
-const empties = computed(() => Math.max(LEAST, Math.ceil(entries.value.length / ROW) * ROW) - entries.value.length);
+const empties = computed(() => Math.max(LEAST, Math.ceil(active.value.length / ROW) * ROW) - active.value.length);
 const hidden = computed(() => every.value.length - entries.value.length);
 const why = computed(() => hiddenSummary(every.value, ui.agentView).join(", "));
 const openEntry = (entry) => peek(entry.opens.table, entry.opens.id, 0, entry.opens.session || "");
@@ -46,13 +49,30 @@ const openEntry = (entry) => peek(entry.opens.table, entry.opens.id, 0, entry.op
             </p>
         </template>
         <TransitionGroup tag="div" name="cell" class="agent-grid">
-            <template v-for="entry in entries" :key="entry.key">
+            <template v-for="entry in active" :key="entry.key">
                 <AgentWindow :entry="entry" @open="openEntry(entry)" />
             </template>
             <template v-for="at in empties" :key="`empty-${at}`">
                 <Tile compact class="agent-empty" aria-hidden="true">
                     <Icon name="agents" :size="22" />
                 </Tile>
+            </template>
+            <template v-if="closed.length">
+                <button
+                    key="closed-fold"
+                    type="button"
+                    class="agent-closed"
+                    data-closed-fold
+                    :aria-expanded="closedOpen"
+                    @click="closedOpen = !closedOpen"
+                >
+                    {{ closedOpen ? "Hide" : "Show" }} {{ closed.length }} closed {{ closed.length === 1 ? "agent" : "agents" }}
+                </button>
+            </template>
+            <template v-if="closedOpen">
+                <template v-for="entry in closed" :key="entry.key">
+                    <AgentWindow :entry="entry" @open="openEntry(entry)" />
+                </template>
             </template>
         </TransitionGroup>
     </div>
@@ -79,6 +99,24 @@ const openEntry = (entry) => peek(entry.opens.table, entry.opens.id, 0, entry.op
 
 .agent-grid > * {
     aspect-ratio: 1;
+}
+
+.agent-grid > .agent-closed {
+    grid-column: 1 / -1;
+    aspect-ratio: auto;
+    padding: 8px 14px;
+    border: 0;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-2);
+    color: var(--text-3);
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.agent-closed:hover {
+    color: var(--text);
 }
 
 /* a cell whose place in the order changes slides there, so it is seen moving rather than gone */

@@ -127,3 +127,21 @@ test("an agent's cell shows what its processes take of the machine once they are
     const [small] = orchestraOf({environments: []}, [{...worker, processes: {cpu_percent: 2, resident_bytes: 300 * 1024 ** 2}}], null, "main", 1200);
     expect(small.facts.processes).toBe("CPU 2%, 300 MB");
 });
+
+test("a worker's badge says its real state, and only a stopped worker says stopped", async () => {
+    const {agentState, isClosed} = await import("../src/domain/orchestra.js");
+    const base = {id: 4, brief: "the parser", model: "sonnet", created_at: at(1000), updated_at: at(1100)};
+    const badge = (row) => {
+        const [entry] = orchestraOf({environments: []}, [{...base, ...row}], null, "main", 1200);
+        return [agentState(entry.card).word, agentState(entry.card).dot, isClosed(entry)];
+    };
+    expect(badge({state: "dispatched"})).toEqual(["Working", "running", false]);
+    expect(badge({state: "clocked in"})).toEqual(["Working", "running", false]);
+    expect(badge({state: "reported"})).toEqual(["Waiting", "you", false]);
+    expect(badge({state: "clocked out"})).toEqual(["Clocked out", "you", false]);
+    expect(badge({state: "ended without clocking out"})).toEqual(["Ended without clocking out", "failed", false]);
+    expect(badge({state: "stopped"})).toEqual(["Stopped", "", false]);
+    expect(badge({state: "merged"})).toEqual(["Merged", "done", true]);
+    expect(badge({state: "released"})).toEqual(["Released", "done", true]);
+    expect(badge({state: "reported", adopted: true})).toEqual(["Retired", "done", true]);
+});

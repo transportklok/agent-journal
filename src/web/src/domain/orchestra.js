@@ -1,7 +1,7 @@
 import {envState} from "./journals.js";
 import {seconds} from "./row.js";
 import {subagentsOf} from "./subagents.js";
-import {workerHeading, workerName, workerState} from "./workers.js";
+import {workerEnding, workerHeading, workerName, workerState} from "./workers.js";
 
 // The agents grid: each environment's live agent, each worker, and the subagents of the agent here, as one kind of entry.
 const STATES = {
@@ -9,14 +9,26 @@ const STATES = {
     waiting: {word: "Waiting", dot: "you"},
     stuck: {word: "Stuck", dot: "failed"},
     stopped: {word: "Stopped", dot: ""},
+    ready: {word: "Clocked out", dot: "you"},
+    unfinished: {word: "Ended without clocking out", dot: "failed"},
+    closed: {word: "Closed", dot: "done"},
     idle: {word: "Idle", dot: "queued"},
 };
-const KEYS = {working: "working", busy: "working", compacting: "working", waiting: "waiting", you: "waiting", stuck: "stuck", silent: "stuck", stopped: "stopped"};
+const KEYS = {working: "working", busy: "working", compacting: "working", waiting: "waiting", you: "waiting", stuck: "stuck", silent: "stuck", stopped: "stopped", ready: "ready", unfinished: "unfinished", closed: "closed"};
 
 export const agentState = (card) => {
     const key = KEYS[card.state] || "idle";
-    return {key, ...STATES[key]};
+    return {key, ...STATES[key], ...(card.word && {word: card.word})};
 };
+
+// a worker's badge says its real state; a merged, released or retired one is closed, only a stopped one is stopped
+const WORKER_STATES = {running: "working", reported: "waiting", ready: "ready", unfinished: "unfinished"};
+
+function workerCard(worker) {
+    const state = workerState(worker);
+    if (state === "finished") return {state: worker.state === "stopped" ? "stopped" : "closed", word: workerEnding(worker)};
+    return {state: WORKER_STATES[state], reason: state === "reported" ? "its report waits for the agent" : ""};
+}
 
 export function splitTask(task) {
     const named = /^([^:]{2,32}): (.+)$/.exec(task || "");
@@ -45,8 +57,6 @@ function environmentEntry(standing) {
         card: {state: envState(standing), reason: agent.stuck || agent.awaiting || ""},
     };
 }
-
-const WORKER_STATES = {running: "working", reported: "waiting", finished: "stopped"};
 
 const GIGABYTE = 1024 ** 3;
 const MEGABYTE = 1024 ** 2;
@@ -95,7 +105,7 @@ function workerEntry(worker, env, now) {
         since: workerState(worker) === "running" ? seconds(worker.created_at) : 0,
         waits: workerState(worker) === "reported",
         opens: {table: "workers", id: worker.id},
-        card: {state: WORKER_STATES[workerState(worker)], reason: workerState(worker) === "reported" ? "its report waits for the agent" : ""},
+        card: workerCard(worker),
     };
 }
 
@@ -167,8 +177,11 @@ export const ORDERS = [
     {key: "active", label: "By last active", icon: "clock"},
 ];
 
-const GROUP = {working: "working", waiting: "waiting", stuck: "waiting", idle: "idle", stopped: "stopped"};
+const GROUP = {working: "working", waiting: "waiting", stuck: "waiting", ready: "waiting", unfinished: "waiting", idle: "idle", stopped: "stopped", closed: "stopped"};
 export const stateGroup = (entry) => GROUP[agentState(entry.card).key] || "idle";
+
+// a closed agent is one that finished well, so the grid folds it away
+export const isClosed = (entry) => agentState(entry.card).key === "closed";
 
 export function hiddenBy(entry, view) {
     if (view.states[stateGroup(entry)] === false) return stateGroup(entry);
