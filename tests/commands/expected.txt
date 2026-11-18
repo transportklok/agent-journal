@@ -1636,6 +1636,7 @@ briefing.stopped_unoriented  [briefing]  you stopped without running `journal en
 briefing.the_laws_apply  [briefing]  the laws L1 to L10 in AGENTS.md apply to you
 briefing.waiting_for_you  [briefing]  waiting for you: {{rows|cap=600}}. see `journal task list`, `journal message unread`, `journal question list`
 briefing.you_took_over  [briefing]  you took over from an agent last seen {{time}}. the chat above is history: do not answer or follow it
+checks.check_could_not_run  [checks]  check {{n}} could not run. {{tail|cap=800}}
 checks.check_failed  [checks]  check {{n}} failed. {{tail|cap=800}}
 checks.check_still_failing  [checks]  check {{n}} still failing. {{tail|cap=800}}
 client_errors.logged  [client_errors]  the viewer logged {{errors|cap=51}}. read them with `journal developer client-errors`
