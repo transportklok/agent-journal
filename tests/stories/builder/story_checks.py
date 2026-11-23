@@ -1,9 +1,11 @@
 from tests.stories.builder.step_checks import HOOK_DURATION
+from journal.features.shell.support.output_files import OutputFiles
 from journal.features.shell.support.output_view import OutputView
 import json
 import subprocess
 import re
 from enum import Enum
+from pathlib import Path
 
 from journal.engine.nudge import Nudge
 from journal.support.typed_lines import JOURNAL_PREFIX
@@ -64,6 +66,17 @@ class StoryChecks:
         with self.app.container.get(Scope).environment(1):
             holders = [turn.worker for turn in self.app.container.get(TurnRows).running()]
         assert agent.number in holders, f"the {agent.role} holds no running test turn: {holders} do"
+
+    def output_lines(self, output: int) -> list[str]:
+        return OutputFiles(Path(self.output_row(output).folder)).lines()
+
+    def expect_output_line(self, output: int, part: str) -> None:
+        lines = self.output_lines(output)
+        assert any(part in line for line in lines), f"output {output} reads {lines}, with no line holding {part!r}"
+
+    def expect_no_output_line(self, output: int, part: str) -> None:
+        lines = self.output_lines(output)
+        assert not any(part in line for line in lines), f"output {output} reads {lines}, with a line holding {part!r}"
 
     def expect_output_count(self, count: int) -> None:
         assert self.output_count() == count, f"{self.output_count()} outputs are kept, not {count}"
