@@ -4,13 +4,16 @@ import re
 import shlex
 import threading
 import time
+from collections.abc import Callable
 
 from journal.engine.clock import Clock
 from journal.features.workers.jobs.auto_dispatch import AutoDispatch
 from journal.features.workers.support.clock_outs_running import ClockOutsRunning
 from journal.features.workers.support.worker_branch import WorkerBranch
 from journal.features.workers.support.worker_runner import WorkerRunner
+from journal.models.command_output import CommandOutput
 from journal.models.test_turn import TestTurn
+from journal.repositories.command_outputs import CommandOutputs
 from journal.repositories.test_turns import TestTurns
 from journal.repositories.scope import Scope
 from journal.repositories.workers import Workers
@@ -19,11 +22,16 @@ from journal.support.actor import Actor
 from journal.repositories.reviewers import Reviewers
 from journal.repositories.verifiers import Verifiers
 from journal.support.caller import Caller
+from journal.support.foreground_option import FOREGROUND_OPTION
+from tests.agent_hooks import pass_time
 from tests.stories.builder.step_result import StepResult
+
+# the longest a run in the background may take to end by itself or at its time limit
+BACKGROUND_RUN_SECONDS = 8
 
 
 class WorkerSteps:
-    """What a worker does in a story and how the agent sends one: dispatched on a task of its own, its clock-in, a proof of a point and its clock-out, each run as the worker it is, a command it only tries, which may be refused, a test turn it already holds and its end, a clock-out left running beside its next steps and its end in the journal after its command answered, a file it commits in its worktree, and the journal's own dispatch of the next tasks."""
+    """What a worker does in a story and how the agent sends one: dispatched on a task of its own, its clock-in, a proof of a point and its clock-out, each run as the worker it is, a command it only tries, which may be refused, a test turn it already holds and its end, one of its test turns moved to the background and that run's end, a clock-out left running beside its next steps and its end in the journal after its command answered, a file it commits in its worktree, and the journal's own dispatch of the next tasks."""
 
     def agent_dispatches_worker(self, agent: StoryAgent, name: str, task: int) -> int:
         self.agent_runs(agent, f"worker dispatch '{name}' --task {task} --changes 'the files of its task' --profile journal-medior --model sonnet --tests 'Scoped tests'")
@@ -95,6 +103,30 @@ class WorkerSteps:
     def worker_test_run_ends(self, agent: StoryAgent) -> StepResult:
         self.ended_turns(agent)
         return self.observed(f"the {agent.role}'s test run ends", None, None)
+
+    def agent_backgrounds_test_turn(self, agent: StoryAgent, ids: str) -> int:
+        outcomes: list = []
+        newest = self.newest_output()
+        thread = threading.Thread(target=lambda: outcomes.append(self.app.console().run(["tests", "turn", ids], self.caller_of(agent))), daemon=True)
+        thread.start()
+        self.wait_output(lambda: self.newest_output() > newest and self.output_row(self.newest_output()).moved)
+        pass_time(self.app, self.setting(FOREGROUND_OPTION))
+        thread.join(BACKGROUND_RUN_SECONDS)
+        self.record_command(f"the {agent.role}'s test turn moves to the background", outcomes[0])
+        return self.newest_output()
+
+    def test_run_stops(self, output: int) -> StepResult:
+        self.wait_output(lambda: self.output_row(output).ended)
+        return self.observed("the test run in the background ends", None, None)
+
+    def wait_output(self, test: Callable[[], bool]) -> None:
+        deadline = time.time() + BACKGROUND_RUN_SECONDS
+        while not test() and time.time() < deadline:
+            time.sleep(0.05)
+
+    def output_row(self, output: int) -> CommandOutput:
+        with self.app.container.get(Scope).environment(1):
+            return self.app.container.get(CommandOutputs).find(output)
 
     def worker_clock_out_starts(self, agent: StoryAgent, line: str) -> StepResult:
         outcomes: list = []

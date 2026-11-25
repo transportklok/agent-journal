@@ -16,6 +16,7 @@ from journal.features.workers.workers_options import WorkersOptions
 from journal.models.test_turn import TestTurn
 from journal.support.foreground_option import FOREGROUND_OPTION
 from journal.models.test_turn_state import TestTurnState
+from journal.models.command_output import CommandOutput
 from journal.models.worker import Worker
 from journal.repositories.command_outputs import CommandOutputs
 from journal.repositories.environments import Environments
@@ -25,6 +26,7 @@ from journal.repositories.test_turns import TestTurns as TurnRows
 from journal.repositories.workers import Workers
 from journal.support.actor import Actor
 from journal.support.caller import Caller
+from journal.support.chain import Chain
 from journal.support.rejection import Rejection
 from journal.support.time_source import TimeSource
 
@@ -34,7 +36,7 @@ PASSED_COUNT = re.compile(r"\b(\d+) passed\b")
 
 
 class TestTurns:
-    """The test budget: a worker's turn to run tests is a row, started through the shell runner in the worker's own worktree as soon as fewer runs go than the budget allows and it is first of those that wait with a caller still waiting on them, else it waits in order; one that would wait when the waiting cap is full is refused, and while a restart of its journal waits none starts: the turn is taken out and refused, so the restart never waits on a run started after it was asked. A run past the time limit is stopped and reported to its worker as timed out; a worker that ends takes out its turns, waiting or running; a worker holds one turn at a time, and its clock-out, instead of being refused, waits for the turn the worker holds to end and then opens its own; turns waiting at a restart start again in order. Its result is what the project's reader for the command picks, and the turn ends when the run does, or, for a run moved to the background, when its output ends; either way how the run ended is kept on its worker, its failed runs in a row counted and a passed one ending the count. A run the shell runner moved to the background is waited for until the foreground limit has passed since it began, so a turn's result is handed back in the foreground."""
+    """The test budget: a worker's turn to run tests is a row, started through the shell runner in the worker's own worktree as soon as fewer runs go than the budget allows and it is first of those that wait with a caller still waiting on them, else it waits in order; one that would wait when the waiting cap is full is refused, and while a restart of its journal waits none starts: the turn is taken out and refused, so the restart never waits on a run started after it was asked. A run past the time limit is stopped and reported to its worker as timed out, one moved to the background too; a turn stops its own run alone, never another run in the folder; a worker that ends takes out its turns, waiting or running; a worker holds one turn at a time, and its clock-out, instead of being refused, waits for the turn the worker holds to end and then opens its own; turns waiting at a restart start again in order. Its result is what the project's reader for the command picks, and the turn ends when the run does, or, for a run moved to the background, when its output ends; either way how the run ended is kept on its worker, its failed runs in a row counted and a passed one ending the count. A run the shell runner moved to the background is waited for until the foreground limit has passed since it began, so a turn's result is handed back in the foreground."""
 
     __test__ = False
 
@@ -83,7 +85,7 @@ class TestTurns:
         if not self.waited(turn):
             raise Rejection("your test run was taken back before it ran: clock out again")
         self.turns.save(self.turns.find(turn.id).with_run_event(self.time_source.seconds()), Actor.system())
-        limit = threading.Timer(self.limit_seconds(), self.stopped, (turn, self.time_source.seconds()))
+        limit = threading.Timer(self.limit_seconds(), self.stopped, (turn,))
         limit.start()
         try:
             output, text = self.whole_run(turn.command, turn.folder, caller, worker.environment_id)
@@ -103,7 +105,7 @@ class TestTurns:
     def whole_run(self, line: str, folder: str, caller: Caller, environment: int):
         started = self.time_source.seconds()
         text = b"".join(self.runner.run(ShellRequest(line=line, cwd=folder, shell="bash", environment=dict(os.environ)), caller, environment)).decode(errors="replace")
-        output = next((row for row in self.outputs.folder_runs(folder) if row.creation_time.timestamp() >= started), None)
+        output = self.line_output(folder, line, started)
         moved = output is not None and not output.ended
         while output is not None and not output.ended:
             time.sleep(POLL_SECONDS)
@@ -168,7 +170,7 @@ class TestTurns:
 
     def run_turn(self, turn: TestTurn, caller: Caller, environment: int) -> str:
         started = self.time_source.seconds()
-        limit = threading.Timer(self.limit_seconds(), self.stopped, (turn, started))
+        limit = threading.Timer(self.limit_seconds(), self.stopped, (turn,))
         limit.start()
         try:
             text = b"".join(self.runner.run(ShellRequest(line=turn.command, cwd=turn.folder, shell="bash", environment=dict(os.environ)), caller, environment)).decode(errors="replace")
@@ -176,7 +178,7 @@ class TestTurns:
             limit.cancel()
             self.turns.save(self.turns.find(turn.id).ended(), Actor.system())
             raise
-        output = self.run_output(turn, started)
+        output = self.run_output(turn)
         moved = output is not None and not output.ended
         output = self.foreground_output(output, started) if moved else output
         later = self.turns.find(turn.id)
@@ -210,12 +212,20 @@ class TestTurns:
         worker = self.workers.find(turn.worker)
         self.workers.save(worker.passed_run() if summary.is_passed() else worker.failed_run(summary.failed, self.time_source.seconds()), Actor.system())
 
-    def run_output(self, turn: TestTurn, started: float):
-        return next((row for row in self.outputs.folder_runs(turn.folder) if row.creation_time.timestamp() >= started), None)
+    def run_output(self, turn: TestTurn) -> CommandOutput | None:
+        later = self.turns.find(turn.id)
+        if later.output:
+            return next((run for run in self.outputs.folder_runs(later.folder) if run.row_id == later.output), None)
+        return self.line_output(later.folder, later.command, later.started_at)
 
-    def stopped(self, turn: TestTurn, started: float) -> None:
+    def line_output(self, folder: str, line: str, started: float) -> CommandOutput | None:
+        command = "\n".join(Chain.self_parts(line))
+        runs = [run for run in self.outputs.folder_runs(folder) if run.command == command and run.creation_time.timestamp() >= started]
+        return runs[-1] if runs else None
+
+    def stopped(self, turn: TestTurn) -> None:
         with self.scope.environment(turn.environment_id):
-            output = self.run_output(turn, started)
+            output = self.run_output(turn)
             if output is None or output.ended:
                 return
             self.timed_out.add(turn.id)
@@ -226,7 +236,7 @@ class TestTurns:
             self.turns.save(turn.ended(), Actor.system())
             if turn.state == TestTurnState.RUNNING:
                 with self.scope.environment(turn.environment_id):
-                    output = next(iter(self.outputs.folder_runs(turn.folder)), None)
+                    output = self.run_output(turn)
                     if output is not None and not output.ended:
                         OutputFiles(Path(output.folder)).stop("journal: this test run was stopped, its worker ended")
 
