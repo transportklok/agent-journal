@@ -82,6 +82,18 @@ class WorkerSteps:
             runner.finish(worker, 0, Actor.system())
         return self.observed(f"the {agent.role}'s run ends", None, None)
 
+    def worker_belongs_to_another_session(self, agent: StoryAgent) -> StepResult:
+        with self.app.container.get(Scope).environment(1):
+            workers = self.app.container.get(Workers)
+            workers.save(workers.find(agent.number).dispatched_by("another-session"), Actor.system())
+        return self.observed(f"the {agent.role} was sent out by another session", None, None)
+
+    def worker_run_ends_mid_turn(self, agent: StoryAgent, report: str) -> StepResult:
+        with self.app.container.get(Scope).environment(1):
+            workers = self.app.container.get(Workers)
+            workers.save(workers.find(agent.number).with_(token_hash="mid-turn"), Actor.system())
+        return self.worker_run_ends_with_its_session(agent, report)
+
     def worker_has_a_test_turn_running(self, agent: StoryAgent, ids: str) -> StepResult:
         with self.app.container.get(Scope).environment(1):
             worker = self.app.container.get(Workers).find(agent.number)
