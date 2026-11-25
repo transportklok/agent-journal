@@ -62,3 +62,13 @@ def test_with_the_news_on_a_stuck_main_still_gets_the_news_line_on_the_tick(stor
     result = story.clock_ticks(TICK_SECONDS)
     result.expect_agent_told(story.agents.subject, WorkersNudges.WORKER_NEWS, needs=f"worker {story.agents.workers.first()} ready")
     story.expect_stack(story.agents.subject, Orchestrating, Impasse)
+
+
+@story(ReviewerAtWork, mode=ORCHESTRATOR_MODE, subject=AgentRole.MAIN)
+def test_a_stuck_main_is_told_at_once_when_a_signed_off_worker_has_no_work_left(story):
+    story.agent_runs(story.agents.subject, "stuck 'nothing to do until the review is in'")
+    result = story.agent_runs(story.agents.reviewers.first(), "review record '1 passed. 2 passed.'")
+    result.expect_agent_told(story.agents.subject, WorkersNudges.IDLE_WORKER)
+    result.expect_agent_told(story.agents.subject, TasksNudges.WAIT_END)
+    story.expect_stack(story.agents.subject, Orchestrating)
+
