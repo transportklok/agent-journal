@@ -96,6 +96,7 @@ from journal.features.workers.states.researching import Researching
 from journal.features.workers.states.working_task import WorkingTask
 from journal.features.workers.listeners.worker_assignment import WorkerAssignment
 from journal.features.workers.listeners.worker_session_assignment import WorkerSessionAssignment
+from journal.features.workers.listeners.dispatcher_session_follow import DispatcherSessionFollow
 
 class Workers(Feature[WorkersData]):
     """A worker is an agent sent to write: code in a worktree of its own, a document, a change. A subagent only reads; a worker is the one that writes."""
@@ -114,7 +115,7 @@ class Workers(Feature[WorkersData]):
     seeds = (WorkersSeed, SubagentsSeed, TestTurnsResume)
     jobs = (WorkerWatch, WorkerMemoryWatch, WorktreeCleanup, AutoDispatch)
     process_cards = (WorkerProcessCard, SubagentProcessCard, TestRunProcessCard)
-    answer_listeners = ((SilentWorkerRecord, Blocking.ANSWER), (WorkerAssignment, Blocking.NEXT_DECISION), (WorkerSessionAssignment, Blocking.NEXT_DECISION), (WorkerTaskChanges, Blocking.NEXT_DECISION))
+    answer_listeners = ((SilentWorkerRecord, Blocking.ANSWER), (WorkerAssignment, Blocking.NEXT_DECISION), (WorkerSessionAssignment, Blocking.NEXT_DECISION), (DispatcherSessionFollow, Blocking.NEXT_DECISION), (WorkerTaskChanges, Blocking.NEXT_DECISION))
     listeners = (QueueHandoffAtReview, WorkerProgressRecord, MergedTestRunStop, SubagentRecord, SubagentCards, WorkerCards, TestRunCard, WorkerMomentCards, WorkerMergeCard, WorkerStartedCard, LimitResumes, QueueTurnResumes, MergedLinesRecord, CommittedLinesRecord, FirstReportRecord, OpenWorkWaitRecord, WorkerMergeRefusalCard, DispatchRefusalCards, UnfinishedClockOut, ShortfallReturn, MergeClashReturn, BranchClashCheck, TaskTouch, WorkerBriefRecord, WorkerBriefBinding, WorkerNoteRecord, WorkerTurnRecord, SubagentTurnRecord, SubagentMessageRecord, TestRunRecord, TestTurnRelease, TestTurnTaskRelease, LoadRecord, LoadTickRecord, ModelFitRecord, WaitRecord, FitnessRecord, MeasureLineRecord)
     data = (WorkersDataReader,)
     helper_data = {AgentRole.WORKER: (SessionWorkersReader,)}

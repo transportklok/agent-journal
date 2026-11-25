@@ -5,6 +5,7 @@ from journal.support.timeout import Timeout
 from journal.events.rows.user_paused import UserPaused
 from journal.events.rows.sequence_run_started import SequenceRunStarted
 from journal.events.rows.sequence_run_transferred import SequenceRunTransferred
+from journal.events.rows.main_session_replaced import MainSessionReplaced
 from journal.events.rows.sequence_step_adopted import SequenceStepAdopted
 from journal.events.rows.sequence_step_finished import SequenceStepFinished
 from journal.events.rows.sequence_step_skipped import SequenceStepSkipped
@@ -128,7 +129,9 @@ class Agent(Scoped):
     def with_session(self, session: str, provider: str) -> "Agent":
         earlier_sessions = tuple(entry for entry in self.previous_sessions if entry.partition(":")[2] not in (session, self.session))
         updated_at = self.updated_at.timestamp() if self.updated_at else 0.0
-        return self.with_(session=session, provider=provider, previous_sessions=(*earlier_sessions, f"{self.provider}:{self.session}"), previous_session_updated_at=updated_at)
+        previous_sessions = (*earlier_sessions, f"{self.provider}:{self.session}")
+        replaced = MainSessionReplaced(environment_id=self.environment_id, agent_session=session, earlier_sessions=tuple(entry.partition(":")[2] for entry in previous_sessions))
+        return self.with_(session=session, provider=provider, previous_sessions=previous_sessions, previous_session_updated_at=updated_at).with_event(replaced)
 
     def last_sessions(self) -> dict[str, str]:
         sessions = dict(entry.split(":", 1) for entry in self.previous_sessions)
