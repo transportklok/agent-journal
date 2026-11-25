@@ -49,6 +49,9 @@ class Workers(ScopedRepository[Worker]):
     def dispatcher_workers(self, session: str) -> list[Worker]:
         return self.selected(self.dispatched_query().filter(dispatcher=session).order("id"))
 
+    def unfinished_of_dispatchers(self, sessions: tuple[str, ...]) -> list[Worker]:
+        return self.selected(self.query().filter_listed("dispatcher", list(sessions)).filter_unlisted("state", [WorkerState.MERGED, WorkerState.RELEASED]).order("id"))
+
     def all_dispatched(self) -> list[Worker]:
         return self.selected_globally(self.dispatched_query().order("id"))
 

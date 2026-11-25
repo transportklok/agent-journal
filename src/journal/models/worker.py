@@ -108,6 +108,9 @@ class Worker(Helper):
     def mention(self) -> WorkerMention:
         return WorkerMention(self.row_id, self.name, self.dispatcher, self.session)
 
+    def dispatched_by(self, session: str) -> "Worker":
+        return self.with_(dispatcher=session)
+
     def dispatched(self, time: float) -> "Worker":
         return self.contacted(time).moved("dispatched", time).with_(state=WorkerState.DISPATCHED).with_event(self.pending(WorkerDispatched, time))
 
