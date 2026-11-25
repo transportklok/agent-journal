@@ -36,7 +36,7 @@ PASSED_COUNT = re.compile(r"\b(\d+) passed\b")
 
 
 class TestTurns:
-    """The test budget: a worker's turn to run tests is a row, started through the shell runner in the worker's own worktree as soon as fewer runs go than the budget allows and it is first of those that wait, else it waits in order; one that would wait when the waiting cap is full is refused, and while a restart of its journal waits none starts: the turn is taken out and refused, so the restart never waits on a run started after it was asked. A run past the time limit is stopped and reported to its worker as timed out, one moved to the background too; a turn stops its own run alone, never another run in the folder; a worker that ends takes out its turns, waiting or running; a worker holds one turn at a time, and its clock-out, instead of being refused, waits for the turn the worker holds to end and then opens its own; turns waiting at a restart start again in order. Its result is what the project's reader for the command picks, and the turn ends when the run does, or, for a run moved to the background, when its output ends; either way how the run ended is kept on its worker, its failed runs in a row counted and a passed one ending the count. A run the shell runner moved to the background is waited for until the foreground limit has passed since it began, so a turn's result is handed back in the foreground."""
+    """The test budget: a worker's turn to run tests is a row, started through the shell runner in the worker's own worktree as soon as fewer runs go than the budget allows and it is first of those that wait with a caller still waiting on them, else it waits in order; one that would wait when the waiting cap is full is refused, and while a restart of its journal waits none starts: the turn is taken out and refused, so the restart never waits on a run started after it was asked. A run past the time limit is stopped and reported to its worker as timed out, one moved to the background too; a turn stops its own run alone, never another run in the folder; a worker that ends takes out its turns, waiting or running; a worker holds one turn at a time, and its clock-out, instead of being refused, waits for the turn the worker holds to end and then opens its own; turns waiting at a restart start again in order. Its result is what the project's reader for the command picks, and the turn ends when the run does, or, for a run moved to the background, when its output ends; either way how the run ended is kept on its worker, its failed runs in a row counted and a passed one ending the count. A run the shell runner moved to the background is waited for until the foreground limit has passed since it began, so a turn's result is handed back in the foreground."""
 
     __test__ = False
 
@@ -46,6 +46,7 @@ class TestTurns:
         self.scope, self.workers, self.environments = scope, workers, environments
         self.lock = threading.Lock()
         self.timed_out: set[int] = set()
+        self.waiters: set[int] = set()
 
     def run_batches(self, worker: Worker, ids: str, caller: Caller) -> str:
         folder, runs = str(self.branch.place(worker)), []
@@ -145,6 +146,14 @@ class TestTurns:
         return self.turns.save(TestTurn(environment_id=worker.environment_id, worker=worker.id, ids=ids, command=command, folder=folder), Actor.worker(worker.id))
 
     def waited(self, turn: TestTurn) -> bool:
+        """Whether the turn got its start; only a turn someone still waits on counts in the order, so one left by a gone caller holds no one up."""
+        self.waiters.add(turn.id)
+        try:
+            return self.started_in_order(turn)
+        finally:
+            self.waiters.discard(turn.id)
+
+    def started_in_order(self, turn: TestTurn) -> bool:
         while True:
             with self.lock:
                 if self.turns.find(turn.id).state != TestTurnState.WAITING:
@@ -153,7 +162,7 @@ class TestTurns:
                     self.turns.save(self.turns.find(turn.id).ended(), Actor.system())
                     raise Rejection(RESTART_HOLD)
                 open_runs = self.running()
-                free = [row for row in self.turns.waiting() if row.folder not in {run.folder for run in open_runs}]
+                free = [row for row in self.turns.waiting() if row.id in self.waiters and row.folder not in {run.folder for run in open_runs}]
                 if free and free[0].id == turn.id and len(open_runs) < self.budget():
                     self.turns.save(self.turns.find(turn.id).started(self.time_source.seconds()), Actor.system())
                     return True

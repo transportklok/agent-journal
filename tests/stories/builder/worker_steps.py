@@ -90,6 +90,12 @@ class WorkerSteps:
             self.app.container.get(TestTurns).save(turn, Actor.worker(worker.id))
         return self.observed(f"the {agent.role} has a test turn running {ids}", None, None)
 
+    def test_turn_left_waiting_by_a_gone_caller(self, agent: StoryAgent, ids: str) -> StepResult:
+        with self.app.container.get(Scope).environment(1):
+            turn = TestTurn(environment_id=1, worker=agent.number + 1000, ids=ids, command=f"./run_tests.sh {ids}", folder=str(self.app.config.home / "elsewhere"))
+            self.app.container.get(TestTurns).save(turn, Actor.system())
+        return self.observed(f"a test turn for {ids} waits ahead of the {agent.role}'s, its caller gone", None, None)
+
     def worker_test_run_ends_after(self, agent: StoryAgent, seconds: float) -> StepResult:
         threading.Timer(seconds, self.ended_turns, (agent,)).start()
         return self.observed(f"the {agent.role}'s test run ends after {seconds:g} seconds", None, None)

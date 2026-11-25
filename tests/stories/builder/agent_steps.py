@@ -40,6 +40,8 @@ from journal.repositories.plugins import Plugins
 from journal.features.skills.support.skill_files import HOMES, SKILL_FILE
 from journal.features.shell.support.shell_runner import EXIT
 from journal.engine.clock import Clock
+from journal.engine.base_state import BaseState
+from journal.engine.support.stack import Stack
 from journal.http.controllers.hooks import FIRING_HEADER, SILENCE_HEADER
 from journal.features.usage.support.process_usage_store import ProcessUsageStore
 from journal.support.process_usage import ProcessUsage
@@ -244,6 +246,14 @@ class AgentSteps:
             agents = self.app.container.get(Agents)
             agents.save(agents.session_agent(session).with_(stack=({"state": "void", "data": {}},), state="void"), Actor.system())
         return self.observed("an older journal's end left the subagent's row resting on Void", None, None)
+
+    def a_stale_save_writes_back_the_stack(self, agent: StoryAgent, *states: type[BaseState]) -> StepResult:
+        stack = Stack(tuple(state() for state in states))
+        with self.app.container.get(Scope).environment(1):
+            agents = self.app.container.get(Agents)
+            row = agents.session_agent(self.session_of(agent))
+            agents.save(row.with_(stack=tuple(stack.serialized()), state=stack.top().name, data=stack.top().serialized()), Actor.system())
+        return self.observed("a save of the agent's row read earlier writes back the stack it held then", None, None)
 
     def subagent_starts(self, subagent: str, role: str) -> StepResult:
         return self.hooked(self.agents.subject, "a subagent starts", "SubagentStart", agent_id=subagent, agent_type=role)
