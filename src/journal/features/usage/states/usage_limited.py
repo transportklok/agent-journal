@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from journal.engine.states.wait import Wait
 from journal.engine.support.settings import Settings
 from journal.engine.support.transition import Transition
-from journal.engine.support.typist import Typist
 from journal.support.timeout import Timeout
 from journal.events.agent.ticked import Ticked
 from journal.events.agent.turn_failed import TurnFailed
@@ -24,12 +23,8 @@ class UsageLimited(Wait):
     limited_at: float = 0.0
     message: str = ""
 
-    def on_enter(self, typist: Typist) -> None:
-        typist.clear()
-        typist.disable()
-
-    def on_exit(self, typist: Typist) -> None:
-        typist.enable()
+    def disables_typing(self) -> bool:
+        return True
 
     def wait_description(self) -> tuple[str, str]:
         return self.message or "the usage limit to reset", ""
