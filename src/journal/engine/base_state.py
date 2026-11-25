@@ -136,11 +136,17 @@ class BaseState:
     def mode_lines(self) -> tuple[Nudge, ...]:
         return ()
 
+    def disables_typing(self) -> bool:
+        return False
+
     def on_enter(self, typist: Typist) -> None:
-        return None
+        if self.disables_typing():
+            typist.clear()
+            typist.disable()
 
     def on_exit(self, typist: Typist) -> None:
-        return None
+        if self.disables_typing():
+            typist.enable()
 
     def serialized(self) -> dict:
         return json.loads(json.dumps(asdict(self)))

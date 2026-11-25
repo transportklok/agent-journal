@@ -4,7 +4,6 @@ from journal.engine.no_task_assigner import NoTaskAssigner
 from journal.engine.base_state import BaseState
 from journal.engine.support.settings import Settings
 from journal.engine.support.transition import Transition
-from journal.engine.support.typist import Typist
 from journal.events.agent.session_started import SessionStarted
 from journal.events.agent.prompt_submitted import PromptSubmitted
 from journal.events.agent.stop import Stop
@@ -24,12 +23,8 @@ class Compacting(BaseState):
     assigner = NoTaskAssigner
     title = events.COMPACTING
 
-    def on_enter(self, typist: Typist) -> None:
-        typist.clear()
-        typist.disable()
-
-    def on_exit(self, typist: Typist) -> None:
-        typist.enable()
+    def disables_typing(self) -> bool:
+        return True
 
     def takes_pushes(self) -> bool:
         return False

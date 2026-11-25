@@ -86,6 +86,9 @@ class SupervisorLink:
     def enable(self, environment_id: int) -> None:
         self.typed.enable(environment_id)
 
+    def is_typing_disabled(self, environment_id: int) -> bool:
+        return self.typed.is_disabled(environment_id)
+
     def clear(self, environment_id: int) -> None:
         self.typed.clear(environment_id)
 
