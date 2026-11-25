@@ -12,6 +12,7 @@ from journal.features.workers.support.worker_resumes import WorkerResumes
 from journal.features.workers.support.worker_worktree import WorkerWorktree
 from journal.features.workers.support.ready_work import ReadyWork
 from journal.models.agent import Agent
+from journal.models.worker_state import WorkerState
 from journal.models.support.ref import Ref
 from journal.repositories.command_outputs import CommandOutputs
 from journal.models.proof_state import ProofState
@@ -60,6 +61,7 @@ class WorkersDataReader:
             "worktrees_root": lambda: (self.config.home / "worktrees").resolve(),
             "worktrees": lambda: tuple(WorkerWorktree(self.branch.folder(w).name, w.row_id, w.name) for w in (*self.workers.open_workers(), *facts.idle_workers)),
             "delivered_workers": lambda: tuple(self.workers.checkable_workers()),
+            "ended_workers": lambda: tuple(self.workers.matching(state=WorkerState.UNFINISHED, adopted=False)),
             "delivered_runs": lambda: tuple((output.row_id, worker.row_id) for worker in facts.delivered_workers if worker.worktree for output in self.outputs.tree_runs(str(self.branch.folder(worker)))),
             "ready_work": lambda: tuple(ReadyWork(w.id, w.name, task, w.silence.timeout.start) for w in self.workers.checkable_workers() for task in self.tasks.holder_task_ids(Ref.build(w))[:1] if self.is_unchecked(task)),
             "workload": lambda: agent.work_queue,
