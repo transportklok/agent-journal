@@ -61,3 +61,65 @@ def test_a_secret_run_template_with_a_masked_value_or_an_unknown_field_is_refuse
     with pytest.raises(Rejection, match="no field passwrd"):
         SecretRun.check_template(secret, "{passwrd}", {"password": KEY})
     SecretRun.check_template(secret, "user={password}", {"password": KEY})
+
+
+@pytest.fixture
+def secrets(values: SecretValues, tmp_path):
+    from journal.db.connection import Connection
+    from journal.db.schema import Schema
+    from journal.events.bus import Bus
+    from journal.models.all_models import AllModels
+    from journal.repositories.secrets import Secrets
+    from journal.support.large_reads import LargeReads
+    from journal.support.query_times import QueryTimes
+    from journal.support.stage_times import StageTimes
+    from journal.support.time_source import TimeSource
+    connection = Connection(tmp_path / "journal.db", Masks(values), StageTimes(), QueryTimes(), LargeReads())
+    Schema(connection, AllModels.MODELS).create()
+    yield Secrets(connection, Bus(), TimeSource())
+    connection.close()
+
+
+def test_an_unmasked_text_is_written_as_it_is_and_is_no_leak(values: SecretValues):
+    from journal.support.unmasked import Unmasked
+    values.write({"GITHUB_KEY": KEY})
+    masks = Masks(values)
+    assert masks.masked((Unmasked(f"field {KEY}"),)) == (f"field {KEY}",) and type(masks.masked((Unmasked(KEY),))[0]) is str
+    assert not masks.has_secret((Unmasked(KEY),)) and masks.leaks == []
+
+
+def test_a_stored_common_word_is_reported_as_weak_and_never_masks(values: SecretValues):
+    values.write({"STAGING_TEST_ACCOUNT_KEY": "password", "GITHUB_KEY": KEY, "SHOWN_USERNAME": "abc"})
+    values.write_shown({"SHOWN_USERNAME"})
+    masks = Masks(values)
+    assert masks.masked(("password",)) == ("password",) and masks.weak == ("STAGING_TEST_ACCOUNT_KEY",)
+
+
+def test_secret_run_12_stdin_password_resolves_while_another_secret_holds_that_word(values: SecretValues, secrets):
+    from journal.support.actor import Actor
+    values.write({"STAGING_TEST_ACCOUNT_KEY": "password", "TRACKMIJN_DB_PASSWORD": KEY})
+    fields = ({"name": "username", "hidden": False, "variable": "TRACKMIJN_DB_USERNAME"}, {"name": "password", "hidden": True, "variable": "TRACKMIJN_DB_PASSWORD"})
+    saved = secrets.save(Secret(title="Trackmijn database", fields=fields, filled=("username", "password")), Actor.user("u"))
+    stored = secrets.find(saved.id)
+    assert stored.fields == fields and stored.filled == ("username", "password")
+    SecretRun.check_template(stored, "{password}", {field["name"]: values.values()[field["variable"]] for field in stored.fields if field["variable"] in values.values()})
+
+
+def test_a_field_name_is_never_masked_while_the_same_value_in_a_title_is(values: SecretValues, secrets):
+    from journal.support.actor import Actor
+    values.write({"OTHER_KEY": KEY})
+    fields = ({"name": KEY, "hidden": True, "variable": "ODD_TOKEN"},)
+    saved = secrets.save(Secret(title=f"odd {KEY}", fields=fields, filled=(KEY,)), Actor.user("u"))
+    stored = secrets.find(saved.id)
+    assert stored.fields == fields and stored.filled == (KEY,) and stored.title == "odd [secret OTHER_KEY]"
+
+
+def test_a_field_name_a_mask_rewrote_is_restored_from_its_variable(secrets):
+    import json
+    from journal.db.migrations.secret_field_names_unmasked import SecretFieldNamesUnmasked
+    masked = "[secret STAGING_TEST_ACCOUNT_KEY]"
+    rewritten = [{"name": "username", "hidden": False, "variable": "TRACKMIJN_DB_READ_ONLY_USERNAME"}, {"name": masked, "hidden": True, "variable": "TRACKMIJN_DB_READ_ONLY_PASSWORD"}]
+    secrets.connection.execute("INSERT INTO secrets (title, fields, filled) VALUES (?, ?, ?)", ("Trackmijn database", json.dumps(rewritten), json.dumps(["username", masked])))
+    SecretFieldNamesUnmasked().apply(secrets.connection)
+    stored = secrets.all()[0]
+    assert [field["name"] for field in stored.fields] == ["username", "password"] and stored.filled == ("username", "password")

@@ -2,6 +2,11 @@
 
 What each release of agent-journal version 4 brought, newest first.
 
+## 4.69.19
+
+- A secret's field names are never masked. Before, another secret whose value was the same word rewrote the field name on save, so `journal secret run <n> --stdin '{password}'` failed with 'has no field password'; the rewritten names are restored from their variables.
+- A stored hidden value that is a common word or shorter than eight characters is shown once as a warning card, naming its variable, so it can be replaced.
+
 ## 4.69.18
 
 - The two settings that remind of blocks with no wait have labels of their own: after completed tasks, and after minutes.

@@ -43,7 +43,7 @@ class Schema:
     @staticmethod
     def columns(model: type[Model]) -> tuple[Column, ...]:
         hints = get_type_hints(model)
-        return tuple(Column.build(field.name, hints[field.name], field.metadata.get("characters", ())) for field in fields(model) if field.metadata.get("column", True))
+        return tuple(Column.build(field.name, hints[field.name], field.metadata.get("characters", ()), field.metadata.get("unmasked", False)) for field in fields(model) if field.metadata.get("column", True))
 
     @staticmethod
     def team_values(model: Model, names: tuple[str, ...] | None) -> dict:
