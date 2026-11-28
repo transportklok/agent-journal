@@ -1,3 +1,4 @@
+import dataclasses
 from typing import ClassVar
 from dataclasses import dataclass
 from datetime import datetime
@@ -20,8 +21,8 @@ class Secret(Model):
     title: str = ""
     brief: str = ""
     secret_type: SecretType = SecretType.CUSTOM
-    fields: tuple = ()
-    filled: tuple[str, ...] = ()
+    fields: tuple = dataclasses.field(default=(), metadata={"unmasked": True})
+    filled: tuple[str, ...] = dataclasses.field(default=(), metadata={"unmasked": True})
     programs: tuple[str, ...] = ()
     proposed: tuple[str, ...] = ()
     helpers: bool = False

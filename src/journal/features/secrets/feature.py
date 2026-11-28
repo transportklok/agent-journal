@@ -50,7 +50,8 @@ outside the project, and never in the journal; the journal masks a value anywher
 - `journal secret folder` names the file the values are stored in; `journal secret delete <n>` removes one.
 - A deleted secret keeps its values for thirty days for `journal secret restore <n>`, then they are removed.
 - A replaced value is still masked for thirty days; `journal secret forget <n>` forgets a secret's replaced values now.
-- A hidden value that is a common word, or shorter than eight characters, is refused: it is never masked.
+- A hidden value that is a common word, or shorter than eight characters, is refused: it is never masked, and one stored earlier is shown on a warning card.
+- A secret's field names and a `--stdin` or `--env` template are never masked.
 """, keywords=("secret", "secrets", "api key", "token", "password", "login"), commands=('secret',))
     listeners = (LeakAlarm, ExpiryQuestion, SecretPurge)
     data = (SecretsDataReader,)
