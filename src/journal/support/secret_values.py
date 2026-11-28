@@ -6,7 +6,9 @@ from functools import cached_property
 from pathlib import Path
 
 from journal.config import Config
+from journal.support.plausible_secret import PlausibleSecret
 from journal.support.private_folder import PrivateFolder
+from journal.support.rejection import Rejection
 from journal.support.secret_field import SecretField
 
 RETIRED = "RETIRED_"
@@ -40,6 +42,8 @@ class SecretValues:
         return dict(rows for rows in map(self.parsed, path.read_text().splitlines()) if rows)
 
     def put_field(self, field: SecretField, value: str) -> None:
+        if field.hidden and not PlausibleSecret([*self.values(), field.variable]).admits(value):
+            raise Rejection(f"the value of {field.name} is a common word or shorter than eight characters, so it is never masked: give it a real secret, or show the field if its value is no secret")
         if field.hidden:
             self.put(field.variable, value)
         else:
@@ -70,6 +74,10 @@ class SecretValues:
 
     def retired_earlier(self, time: float) -> list[str]:
         return [name for name in self.values() if name.startswith(RETIRED) and int(name.rsplit(EMAIL_SIGN_TOKEN, 1)[1]) < time]
+
+    def retired(self, variables: list[str]) -> list[str]:
+        """The stored copies of the replaced values of these variables, kept for masking."""
+        return [name for name in self.values() if name.startswith(RETIRED) and name.removeprefix(RETIRED).rsplit(EMAIL_SIGN_TOKEN, 1)[0] in variables]
 
     def drop(self, variables: list[str]) -> None:
         self.write({name: value for name, value in self.values().items() if name not in variables})

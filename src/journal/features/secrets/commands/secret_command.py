@@ -20,6 +20,7 @@ from journal.repositories.messages import Messages
 from journal.repositories.scope import Scope
 from journal.repositories.secrets import Secrets
 from journal.repositories.workers import Workers
+from journal.support.secret_field import SecretField
 from journal.support.secret_values import SecretValues
 from journal.support.time_source import TimeSource
 
@@ -68,6 +69,7 @@ class SecretCommand(Command):
         self.verb(verbs, "folder", "the file the values live in, outside the project")
         self.verb(verbs, "delete", "a secret put away; its values are stored for thirty days for a restore").add_argument("n", type=int)
         self.verb(verbs, "restore", "a deleted secret back, with its values").add_argument("n", type=int)
+        self.verb(verbs, "forget", "the replaced values of a secret, kept thirty days for masking, forgotten now").add_argument("n", type=int)
 
     def create(self, args: Namespace, caller: Caller) -> int:
         secret = self.file(args.title, args.brief, SecretType.lookup(args.secret_type), caller)
@@ -183,4 +185,11 @@ class SecretCommand(Command):
     def restore(self, args: Namespace, caller: Caller) -> int:
         secret = self.secrets.save(self.secrets.find(args.n).restored(), caller.actor)
         print(f"secret {secret.id} restored")
+        return 0
+
+    def forget(self, args: Namespace, caller: Caller) -> int:
+        secret = self.secrets.find(args.n)
+        retired = self.values.retired([SecretField.build(raw).variable for raw in secret.fields])
+        self.values.drop(retired)
+        print(f"{len(retired)} replaced value{'' if len(retired) == 1 else 's'} of secret {secret.id} forgotten: no longer masked")
         return 0

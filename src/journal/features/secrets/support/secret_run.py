@@ -38,6 +38,7 @@ class SecretRun:
         if missing:
             raise Rejection(f"secret {secret.id} has no value for {', '.join(missing)} here: ask with `journal secret request`")
         name_index = {f.name: values[f.variable] for f in fields}
+        self.check_template(secret, template, name_index)
         value = PLACEHOLDER.sub(lambda rows: name_index.get(rows[1], rows[0]), template) if template else next((values[f.variable] for f in fields if f.hidden), "")
         client = ClientVariables(command[0], {**self.plain_values(fields, values), **{f.name.lower(): values[f.variable] for f in fields}})
         tokens = self.program_variables(command[0])
@@ -56,6 +57,14 @@ class SecretRun:
             return finished.returncode, mask.masked(finished.stdout)
         finally:
             shutil.rmtree(home, ignore_errors=True)
+
+    @staticmethod
+    def check_template(secret: Secret, template: str, name_index: dict[str, str]) -> None:
+        if "[secret " in template:
+            raise Rejection(f"the --stdin template holds a masked value, {template!r}: write each value as {{field}}, one of {', '.join(name_index)}")
+        unknown = [name for name in PLACEHOLDER.findall(template) if name not in name_index]
+        if unknown:
+            raise Rejection(f"secret {secret.id} has no field {', '.join(unknown)}: write each value as {{field}}, one of {', '.join(name_index)}")
 
     def plain_values(self, fields: list[SecretField], values: dict[str, str]) -> dict[str, str]:
         """The shown values stored beside a login's fields under its variable stem, such as HOST, PORT and DATABASE, by lower-case name."""
