@@ -229,6 +229,7 @@ agent secret update 1 --title "The shop's admin login"
 agent secret propose 1 curl
 agent secret delete 1
 agent secret restore 1
+agent secret forget 1
 agent secret fill --help
 agent secret folder --help
 agent secret login --help

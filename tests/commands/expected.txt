@@ -1227,6 +1227,10 @@ $ agent: journal secret restore 1
 exit 0
 secret 1 restored
 
+$ agent: journal secret forget 1
+exit 0
+0 replaced values of secret 1 forgotten: no longer masked
+
 $ agent: journal secret fill --help
 exit 0
 usage: journal secret fill [-h] n
